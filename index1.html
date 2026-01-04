@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartSplit Bill Enhanced - Web Version</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .sidebar { min-height: 100vh; background-color: #343a40; color: white; }
+        .nav-link { color: rgba(255,255,255,.8); cursor: pointer; }
+        .nav-link:hover, .nav-link.active { color: white; background-color: #495057; }
+        .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        
+        /* LAYAR LOGIN */
+        #login-screen { 
+            height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            background: #e9ecef; 
+            position: fixed; /* Agar menutup layar penuh */
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 9999;
+        }
+
+        /* PERBAIKAN DI SINI: Gunakan !important agar fungsi hide jalan */
+        .hide { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div id="login-screen">
+    <div class="card p-4" style="width: 400px;">
+        <h3 class="text-center mb-4"><i class="fas fa-file-invoice-dollar"></i> SmartSplit</h3>
+        <div class="alert alert-info py-2" style="font-size: 14px;">
+            <small>Default User: <b>admin</b> | Pass: <b>admin123</b></small>
+        </div>
+        <div class="mb-3">
+            <label>Username</label>
+            <input type="text" id="usernameInput" class="form-control" placeholder="admin" value="admin">
+        </div>
+        <div class="mb-3">
+            <label>Password</label>
+            <input type="password" id="passwordInput" class="form-control" placeholder="admin123" value="admin123">
+        </div>
+        <button class="btn btn-primary w-100" onclick="app.login()">Login Masuk</button>
+    </div>
+</div>
+
+<div id="main-app" class="container-fluid hide">
+    <div class="row">
+        <div class="col-md-2 sidebar p-3">
+            <h4 class="text-center mb-4">SmartSplit</h4>
+            <ul class="nav flex-column">
+                <li class="nav-item"><a class="nav-link active" onclick="app.switchTab('dashboard')"><i class="fas fa-home me-2"></i> Dashboard</a></li>
+                <li class="nav-item"><a class="nav-link" onclick="app.switchTab('buyers')"><i class="fas fa-users me-2"></i> Data Pembeli</a></li>
+                <li class="nav-item"><a class="nav-link" onclick="app.switchTab('vouchers')"><i class="fas fa-ticket-alt me-2"></i> Voucher</a></li>
+                <li class="nav-item"><a class="nav-link" onclick="app.switchTab('logs')"><i class="fas fa-history me-2"></i> Log Aktivitas</a></li>
+                <li class="nav-item mt-4"><a class="nav-link text-danger" onclick="app.logout()"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            </ul>
+        </div>
+
+        <div class="col-md-10 p-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 id="page-title">Dashboard</h2>
+                <div>
+                    <span class="badge bg-secondary me-2" id="user-display"></span>
+                    <button class="btn btn-warning btn-sm" onclick="app.undo()" title="Undo Action (Stack)">
+                        <i class="fas fa-undo"></i> Undo
+                    </button>
+                    <button class="btn btn-success btn-sm ms-2" onclick="app.generateReport()">
+                        <i class="fas fa-file-download"></i> Laporan
+                    </button>
+                </div>
+            </div>
+
+            <div id="view-dashboard" class="view-section">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="card p-3 bg-primary text-white">
+                            <h5>Total Pembeli</h5>
+                            <h2 id="dash-total-buyers">0</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card p-3 bg-success text-white">
+                            <h5>Total Transaksi</h5>
+                            <h2 id="dash-total-amount">Rp 0</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card p-3 bg-danger text-white">
+                            <h5>Belum Lunas</h5>
+                            <h2 id="dash-unpaid">0</h2>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-4 p-3">
+                    <h5>Status Pembayaran Cepat</h5>
+                    <table class="table table-hover mt-2">
+                        <thead>
+                            <tr><th>Nama</th><th>Total</th><th>Dibayar</th><th>Sisa</th><th>Status</th></tr>
+                        </thead>
+                        <tbody id="dashboard-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="view-buyers" class="view-section hide">
+                <div class="card p-3 mb-3">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <input type="text" id="newBuyerName" class="form-control" placeholder="Nama Pembeli Baru">
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-primary w-100" onclick="app.addBuyer()">+ Tambah</button>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <div class="input-group w-50 ms-auto">
+                                <span class="input-group-text">Global Diskon %</span>
+                                <input type="number" id="globalDiscount" class="form-control" value="0" onchange="app.recalculateAll()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="buyers-list">
+                    </div>
+            </div>
+
+            <div id="view-vouchers" class="view-section hide">
+                <div class="card p-3">
+                    <h5>Kelola Voucher (Doubly Linked List Logic)</h5>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-3"><input type="text" id="voucherCode" class="form-control" placeholder="Kode"></div>
+                        <div class="col-md-3"><input type="number" id="voucherAmount" class="form-control" placeholder="Nominal"></div>
+                        <div class="col-md-4"><input type="text" id="voucherDesc" class="form-control" placeholder="Deskripsi"></div>
+                        <div class="col-md-2"><button class="btn btn-primary w-100" onclick="app.addVoucher()">Tambah</button></div>
+                    </div>
+                    <table class="table table-bordered">
+                        <thead><tr><th>ID</th><th>Kode</th><th>Potongan</th><th>Deskripsi</th><th>Aksi</th></tr></thead>
+                        <tbody id="voucher-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="view-logs" class="view-section hide">
+                <div class="card p-3">
+                    <h5>Log Aktivitas User</h5>
+                    <ul class="list-group list-group-flush" id="log-list"></ul>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addItemModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Tambah Barang</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="currentBuyerId">
+                <div class="mb-2"><label>Nama Barang</label><input type="text" id="itemName" class="form-control"></div>
+                <div class="mb-2"><label>Harga (Rp)</label><input type="number" id="itemPrice" class="form-control"></div>
+                <div class="mb-2"><label>Diskon Item (%)</label><input type="number" id="itemDiscount" class="form-control" value="0"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="app.saveItem()">Simpan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="payModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Catat Pembayaran</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="payBuyerId">
+                <p>Total Tagihan: <span id="payTotalBill" class="fw-bold"></span></p>
+                <p>Sisa Tagihan: <span id="payRemaining" class="fw-bold text-danger"></span></p>
+                <div class="mb-2"><label>Jumlah Bayar</label><input type="number" id="payAmount" class="form-control"></div>
+                <div class="mb-2"><label>Metode</label>
+                    <select id="payMethod" class="form-select">
+                        <option>Tunai</option><option>Transfer</option><option>QRIS</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="app.processPayment()">Bayar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const app = {
+        data: {
+            currentUser: null,
+            buyers: [],
+            vouchers: [],
+            logs: [],
+            globalDiscount: 0,
+            undoStack: []
+        },
+
+        init: function() {
+            // Cek session agar tidak perlu login ulang saat refresh
+            const storedUser = sessionStorage.getItem('user');
+            if(storedUser) {
+                this.data.currentUser = storedUser;
+                this.showMainApp();
+            }
+        },
+
+        // --- AUTH SYSTEM ---
+        login: function() {
+            const u = document.getElementById('usernameInput').value;
+            const p = document.getElementById('passwordInput').value;
+            
+            // Validasi Sederhana
+            if(u.length >= 3 && p.length >= 6) {
+                this.data.currentUser = u;
+                sessionStorage.setItem('user', u);
+                this.logActivity(`User ${u} login.`);
+                this.showMainApp();
+            } else {
+                alert("Gagal Login! Username minimal 3 huruf, Password minimal 6 huruf.\n\nCoba: admin / admin123");
+            }
+        },
+
+        logout: function() {
+            this.logActivity(`User ${this.data.currentUser} logout.`);
+            sessionStorage.removeItem('user');
+            location.reload();
+        },
+
+        showMainApp: function() {
+            // Menambahkan class hide ke login screen
+            document.getElementById('login-screen').classList.add('hide');
+            // Menghapus class hide dari main app
+            document.getElementById('main-app').classList.remove('hide');
+            
+            document.getElementById('user-display').innerText = this.data.currentUser;
+            this.renderDashboard();
+        },
+
+        // --- STACK / UNDO SYSTEM ---
+        saveState: function() {
+            const stateSnapshot = JSON.parse(JSON.stringify({
+                buyers: this.data.buyers,
+                globalDiscount: this.data.globalDiscount
+            }));
+            this.data.undoStack.push(stateSnapshot);
+            if (this.data.undoStack.length > 50) {
+                this.data.undoStack.shift();
+            }
+        },
+
+        undo: function() {
+            if (this.data.undoStack.length === 0) {
+                alert("Tidak ada riwayat undo!");
+                return;
+            }
+            const lastState = this.data.undoStack.pop();
+            this.data.buyers = lastState.buyers;
+            this.data.globalDiscount = lastState.globalDiscount;
+            document.getElementById('globalDiscount').value = this.data.globalDiscount;
+            this.logActivity("Melakukan Undo perubahan.");
+            this.recalculateAll(false);
+            this.renderBuyers();
+            this.renderDashboard();
+        },
+
+        // --- NAVIGATION ---
+        switchTab: function(tabName) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hide'));
+            document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+            document.getElementById(`view-${tabName}`).classList.remove('hide');
+            event.target.closest('.nav-link').classList.add('active');
+            document.getElementById('page-title').innerText = tabName.charAt(0).toUpperCase() + tabName.slice(1);
+
+            if(tabName === 'dashboard') this.renderDashboard();
+            if(tabName === 'buyers') this.renderBuyers();
+            if(tabName === 'vouchers') this.renderVouchers();
+            if(tabName === 'logs') this.renderLogs();
+        },
+
+        // --- LOGIC ---
+        logActivity: function(msg) {
+            const time = new Date().toLocaleString();
+            this.data.logs.unshift({ time, user: this.data.currentUser, msg });
+        },
+
+        addBuyer: function() {
+            const name = document.getElementById('newBuyerName').value;
+            if(!name) return alert("Nama tidak boleh kosong");
+            this.saveState();
+            const newBuyer = {
+                id: Date.now(),
+                name: name,
+                items: [], payments: [],
+                totalRaw: 0, totalAfterItemDisc: 0, globalDiscAmount: 0, finalTotal: 0, paid: 0, remaining: 0,
+                status: 'BELUM_BAYAR'
+            };
+            this.data.buyers.push(newBuyer);
+            document.getElementById('newBuyerName').value = '';
+            this.logActivity(`Menambah pembeli: ${name}`);
+            this.renderBuyers();
+        },
+
+        openAddItemModal: function(buyerId) {
+            document.getElementById('currentBuyerId').value = buyerId;
+            document.getElementById('itemName').value = '';
+            document.getElementById('itemPrice').value = '';
+            document.getElementById('itemDiscount').value = '0';
+            new bootstrap.Modal(document.getElementById('addItemModal')).show();
+        },
+
+        saveItem: function() {
+            const buyerId = document.getElementById('currentBuyerId').value;
+            const name = document.getElementById('itemName').value;
+            const price = parseFloat(document.getElementById('itemPrice').value);
+            const disc = parseFloat(document.getElementById('itemDiscount').value);
+
+            if(!name || isNaN(price)) return alert("Data barang tidak valid");
+            this.saveState();
+            const buyer = this.data.buyers.find(b => b.id == buyerId);
+            const priceAfterDisc = price - (price * (disc/100));
+            buyer.items.push({ name, price, disc, priceAfterDisc });
+
+            this.recalculateAll(false);
+            this.logActivity(`Menambah barang ${name} ke ${buyer.name}`);
+            bootstrap.Modal.getInstance(document.getElementById('addItemModal')).hide();
+            this.renderBuyers();
+        },
+
+        recalculateAll: function(save = true) {
+            if(save) this.saveState();
+            const globalDiscPercent = parseFloat(document.getElementById('globalDiscount').value) || 0;
+            this.data.globalDiscount = globalDiscPercent;
+            let grandTotalAfterItemDisc = 0;
+            this.data.buyers.forEach(buyer => {
+                buyer.totalRaw = 0; buyer.totalAfterItemDisc = 0;
+                buyer.items.forEach(item => {
+                    buyer.totalRaw += item.price;
+                    buyer.totalAfterItemDisc += item.priceAfterDisc;
+                });
+                grandTotalAfterItemDisc += buyer.totalAfterItemDisc;
+            });
+            this.data.buyers.forEach(buyer => {
+                if (grandTotalAfterItemDisc > 0) {
+                    const proporsi = buyer.totalAfterItemDisc / grandTotalAfterItemDisc;
+                    buyer.globalDiscAmount = (grandTotalAfterItemDisc * (globalDiscPercent / 100)) * proporsi;
+                } else {
+                    buyer.globalDiscAmount = 0;
+                }
+                buyer.finalTotal = buyer.totalAfterItemDisc - buyer.globalDiscAmount;
+                buyer.remaining = buyer.finalTotal - buyer.paid;
+                if(buyer.remaining <= 100 && buyer.finalTotal > 0) buyer.status = 'SUDAH_BAYAR'; // Toleransi 100 perak
+                else if(buyer.paid > 0) buyer.status = 'SEBAGIAN_BAYAR';
+                else buyer.status = 'BELUM_BAYAR';
+            });
+            if(document.getElementById('view-buyers').classList.contains('hide') === false) {
+                this.renderBuyers();
+            }
+        },
+
+        openPayModal: function(buyerId) {
+            const buyer = this.data.buyers.find(b => b.id == buyerId);
+            document.getElementById('payBuyerId').value = buyerId;
+            document.getElementById('payTotalBill').innerText = this.formatRupiah(buyer.finalTotal);
+            document.getElementById('payRemaining').innerText = this.formatRupiah(buyer.remaining);
+            document.getElementById('payAmount').value = '';
+            new bootstrap.Modal(document.getElementById('payModal')).show();
+        },
+
+        processPayment: function() {
+            const buyerId = document.getElementById('payBuyerId').value;
+            const amount = parseFloat(document.getElementById('payAmount').value);
+            const method = document.getElementById('payMethod').value;
+            if(isNaN(amount) || amount <= 0) return alert("Jumlah tidak valid");
+            this.saveState();
+            const buyer = this.data.buyers.find(b => b.id == buyerId);
+            buyer.paid += amount;
+            buyer.payments.push({ date: new Date().toLocaleString(), amount: amount, method: method });
+            this.recalculateAll(false);
+            this.logActivity(`Pembayaran dicatat: ${buyer.name} sebesar ${amount}`);
+            bootstrap.Modal.getInstance(document.getElementById('payModal')).hide();
+            this.renderBuyers();
+        },
+
+        addVoucher: function() {
+            const kode = document.getElementById('voucherCode').value;
+            const nominal = document.getElementById('voucherAmount').value;
+            const desc = document.getElementById('voucherDesc').value;
+            if(!kode || !nominal) return alert("Lengkapi data voucher");
+            this.data.vouchers.push({ id: Date.now(), kode, nominal, desc });
+            document.getElementById('voucherCode').value = '';
+            document.getElementById('voucherAmount').value = '';
+            document.getElementById('voucherDesc').value = '';
+            this.logActivity(`Voucher ditambahkan: ${kode}`);
+            this.renderVouchers();
+        },
+
+        // --- RENDERING ---
+        formatRupiah: function(num) {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(num);
+        },
+
+        renderDashboard: function() {
+            document.getElementById('dash-total-buyers').innerText = this.data.buyers.length;
+            let totalTrans = 0, totalUnpaid = 0;
+            let html = '';
+            this.data.buyers.forEach(b => {
+                totalTrans += b.finalTotal;
+                if(b.status !== 'SUDAH_BAYAR') totalUnpaid++;
+                let badgeClass = b.status === 'SUDAH_BAYAR' ? 'bg-success' : (b.status === 'SEBAGIAN_BAYAR' ? 'bg-warning' : 'bg-danger');
+                html += `<tr><td>${b.name}</td><td>${this.formatRupiah(b.finalTotal)}</td><td>${this.formatRupiah(b.paid)}</td><td>${this.formatRupiah(b.remaining)}</td><td><span class="badge ${badgeClass}">${b.status.replace('_', ' ')}</span></td></tr>`;
+            });
+            document.getElementById('dash-total-amount').innerText = this.formatRupiah(totalTrans);
+            document.getElementById('dash-unpaid').innerText = totalUnpaid;
+            document.getElementById('dashboard-table-body').innerHTML = html;
+        },
+
+        renderBuyers: function() {
+            const container = document.getElementById('buyers-list');
+            container.innerHTML = '';
+            this.data.buyers.forEach(buyer => {
+                let itemsHtml = '';
+                buyer.items.forEach(item => {
+                    itemsHtml += `<li class="list-group-item d-flex justify-content-between lh-sm"><div><h6 class="my-0">${item.name}</h6><small class="text-muted">Disc: ${item.disc}%</small></div><span class="text-muted">${this.formatRupiah(item.priceAfterDisc)}</span></li>`;
+                });
+                let paymentsHtml = '';
+                buyer.payments.forEach(pay => {
+                    paymentsHtml += `<small class="d-block text-success">- ${pay.date}: ${this.formatRupiah(pay.amount)} (${pay.method})</small>`;
+                });
+                const html = `<div class="card mb-3"><div class="card-header d-flex justify-content-between align-items-center"><strong>${buyer.name}</strong><span class="badge ${buyer.status === 'SUDAH_BAYAR' ? 'bg-success' : 'bg-danger'}">${buyer.status}</span></div><div class="card-body"><ul class="list-group mb-3">${itemsHtml}<li class="list-group-item d-flex justify-content-between bg-light"><span>Total (stlh disc item)</span><strong>${this.formatRupiah(buyer.totalAfterItemDisc)}</strong></li><li class="list-group-item d-flex justify-content-between text-danger"><span>Potongan Global</span><strong>-${this.formatRupiah(buyer.globalDiscAmount)}</strong></li><li class="list-group-item d-flex justify-content-between bg-dark text-white"><span>TOTAL AKHIR</span><strong>${this.formatRupiah(buyer.finalTotal)}</strong></li></ul><div class="mb-2 border-top pt-2"><h6>Riwayat Bayar:</h6>${paymentsHtml || '<small class="text-muted">Belum ada pembayaran</small>'}<div class="mt-1 fw-bold">Sisa: ${this.formatRupiah(buyer.remaining)}</div></div><div class="mt-3"><button class="btn btn-sm btn-outline-primary" onclick="app.openAddItemModal(${buyer.id})">+ Barang</button> <button class="btn btn-sm btn-outline-success" onclick="app.openPayModal(${buyer.id})"><i class="fas fa-money-bill"></i> Bayar</button></div></div></div>`;
+                container.innerHTML += html;
+            });
+        },
+
+        renderVouchers: function() {
+            const tbody = document.getElementById('voucher-table-body');
+            tbody.innerHTML = '';
+            this.data.vouchers.forEach(v => {
+                tbody.innerHTML += `<tr><td>${v.id}</td><td><span class="badge bg-info text-dark">${v.kode}</span></td><td>Rp ${v.nominal}</td><td>${v.desc}</td><td><button class="btn btn-sm btn-danger">Hapus</button></td></tr>`;
+            });
+        },
+
+        renderLogs: function() {
+            const ul = document.getElementById('log-list');
+            ul.innerHTML = '';
+            this.data.logs.forEach(l => {
+                ul.innerHTML += `<li class="list-group-item"><small class="text-muted">[${l.time}]</small> <strong>${l.user}</strong>: ${l.msg}</li>`;
+            });
+        },
+
+        generateReport: function() {
+            let content = "=== LAPORAN SMARTSPLIT ===\nTanggal: " + new Date().toLocaleString() + "\n\n";
+            this.data.buyers.forEach(b => {
+                content += `PEMBELI: ${b.name}\nStatus: ${b.status}\nTotal Akhir: ${this.formatRupiah(b.finalTotal)}\nSudah Bayar: ${this.formatRupiah(b.paid)}\nSisa: ${this.formatRupiah(b.remaining)}\n--------------------------\n`;
+            });
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'laporan_transparansi.txt'; a.click();
+        }
+    };
+
+    app.init();
+</script>
+</body>
+</html>
